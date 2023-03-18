@@ -25,5 +25,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot()
     {
         DiscordBotJob::dispatch();
+        // if the job fails retry it
+
     }
 }

@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Services\ChatGPTService;
 use App\Services\DiscordService;
 use Discord\Discord;
+use Discord\Parts\Channel\Message;
 use Discord\Parts\User\Member;
 use Discord\WebSockets\Intents;
 use Illuminate\Bus\Queueable;
@@ -17,10 +19,11 @@ class DiscordBotJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = null;
+    private $chatGPTService;
 
     public function __construct()
     {
-        //
+        $this->chatGPTService = new ChatGPTService();
     }
 
     public function handle()
@@ -32,6 +35,9 @@ class DiscordBotJob implements ShouldQueue
         $discord = new Discord(['token' => $token, 'intents' => $intents]);
 
         $discord->on('ready', function ($discord) {
+            //send a message to the channel
+//            $discord->getChannel('1086557788899135568')->sendMessage('GPT is ready!');
+
             echo "Bot is ready!", PHP_EOL;
         });
 
@@ -53,12 +59,44 @@ class DiscordBotJob implements ShouldQueue
 
             // Respond to the mention
             if ($mentioned) {
-                $response = 'Hello, I am GPT bot!'; // customize your response here
+                $response = $this->handleGPTMessage($message);
                 $message->channel->sendMessage($response);
             }
         });
 
 
         $discord->run();
+    }
+
+    private function handleGPTMessage(Message $message)
+    {
+        $message = json_encode($message);
+        $response = $this->chatGPTService->sendMessage($message);
+//        dd($response);
+        // if reponse choices is empty, return an error message
+        if (empty($response['choices'])) {
+            // return $response as a discord code block
+            return '```' . $response . '```';
+        }
+        return $response['choices'][0]['message']['content'];
+    }
+
+    function transformDiscordMessages(array $discordMessages): array
+    {
+        $transformedMessages = [];
+
+        foreach ($discordMessages as $discordMessage) {
+            $role = $discordMessage->author->bot ? 'assistant' : 'user';
+            $content = $discordMessage->content;
+
+            $transformedMessage = [
+                'role' => $role,
+                'content' => $content,
+            ];
+
+            $transformedMessages[] = $transformedMessage;
+        }
+
+        return $transformedMessages;
     }
 }
